@@ -63,6 +63,14 @@ SYMBOL: sym-table
 : make-expr ( args body env -- lobj )
   <expr> "expr" swap <lobj> ;
 
+: nreverse ( lobj -- lobj )
+  kNil get-global swap
+  [ dup tag>> "cons" = ] [  ! ret lst
+    dup data>> cdr>> -rot  ! tmp ret lst
+    dup data>> swapd cdr<<  ! tmp lst
+    swap  ! lst tmp
+  ] while drop ;
+
 : space? ( ch -- ? )
   V{ 0x09 0x0a 0x0d 0x20 } member? ;  ! Tab, Linefeed, Return, Space
 
@@ -99,6 +107,8 @@ SYMBOL: sym-table
   rot swap rot subseq  ! 0 lobj str
   rot drop ;
 
+DEFER: read-list
+
 : read ( str -- lobj str )
   skip-spaces
   dup length 0 = [
@@ -108,10 +118,11 @@ SYMBOL: sym-table
       drop "invalid syntax" make-error ""
     ] [
       dup 0 swap nth 0x28 = [  ! Lpar
-        drop "noimpl" make-error ""
+        dup length 1 swap rot subseq read-list
       ] [
-        dup 0 swap nth 0x27 = [
-          drop "noimpl" make-error ""
+        dup 0 swap nth 0x27 = [  ! Quote
+          dup length 1 swap rot subseq read  !  obj next
+          swap kNil get-global make-cons "quote" make-sym swap make-cons swap
         ] [
           read-atom
         ] if
@@ -119,8 +130,70 @@ SYMBOL: sym-table
     ] if
   ] if ;
 
+: read-list-internal ( lobj str -- lobj str ? )
+  skip-spaces
+  dup length 0 = [
+    2drop "unfinished parenthesis" make-error "" f
+  ] [
+    dup 0 swap nth 0x29 = [  ! Rpar
+      dup length 1 swap rot subseq swap nreverse swap f
+    ] [
+      read swap  ! ret next obj
+      dup tag>> "error" = [
+        -rot 2drop "" f
+      ] [
+        rot make-cons swap t
+      ] if
+    ] if
+  ] if ;
+
+: read-list ( str -- lobj str )
+  kNil get-global swap
+  t
+  [ ] [  ! quot lobj str
+    read-list-internal
+  ] while ;
+
+DEFER: print-list
+
+: print-obj ( lobj -- str )
+  dup tag>>  ! lobj tag
+  dup "sym" = swap dup "nil" = rot or [
+    drop data>>
+  ] [
+    dup "error" = [
+      drop data>> "<error: " swap ">" 3append
+    ] [
+      dup "num" = [
+        drop data>> number>string
+      ] [
+        dup "cons" = [
+          drop print-list
+        ] [
+          nip "<" swap ">" 3append
+        ] if
+      ] if
+    ] if
+  ] if ;
+
+: print-list ( lobj -- str )
+  dup data>> car>> print-obj
+  "(" swap append
+  swap data>> cdr>>
+  [ dup tag>> "cons" = ] [  ! ret obj
+    dup data>> car>> print-obj
+    rot " "  ! obj str ret " "
+    rot 3append swap
+    data>> cdr>>
+  ] while
+  dup tag>> "nil" = [
+    drop ")" append
+  ] [
+    print-obj " . " swap 3append ")" append
+  ] if ;
+
 "> " write flush
 [ readln dup ] [
-  read drop .
+  read drop print-obj print
   "> " write flush
 ] while drop
