@@ -60,6 +60,9 @@ SYMBOL: sym-table
 : make-cons ( car cdr -- lobj )
   <cell> "cons" swap <lobj> ;
 
+: make-subr ( n -- lobj )
+  "subr" swap <lobj> ;
+
 : make-expr ( args body env -- lobj )
   <expr> "expr" swap <lobj> ;
 
@@ -228,6 +231,9 @@ kNil get-global dup make-cons g-env set-global
   data>> dup car>> rot swap make-cons  ! data pair
   swap car<< ;
 
+DEFER: apply
+DEFER: evlis
+
 : eval ( lobj env -- lobj )
   swap dup tag>>  ! env lobj tag
   dup "nil" = swap dup "num" = rot or swap dup "error" = rot or [
@@ -241,10 +247,89 @@ kNil get-global dup make-cons g-env set-global
         nip data>> cdr>>
       ] if
     ] [
-      2drop "noimpl" make-error
+      data>> dup cdr>> swap car>>  ! env args op
+      dup "quote" make-sym eq? [
+        drop nip safe-car
+      ] [
+        dup "if" make-sym eq? [
+          drop dupd dup safe-cdr swap safe-car  ! env env CDR(args) CAR(args)
+          rot eval kNil get-global eq? [  ! env CDR(args)
+            safe-cdr safe-car
+          ] [
+            safe-car
+          ] if
+          swap eval
+        ] [
+          rot dup -rot  ! args env op env
+          eval  ! args env fn
+          -rot dup -rot  ! fn env args env
+          evlis  ! fn env args
+          swap apply
+        ] if
+      ] if
     ] if
   ] if ;
 
+: evlis ( lst env -- lobj )
+  swap kNil get-global -rot  ! ret env lst
+  [ dup tag>> "cons" = ] [
+    dupd dup data>> car>>  ! ret env env lst CAR(lst)
+    rot eval  ! ret env lst lobj
+    dup tag>> "error" = [
+      2nip nip kNil get-global dup  ! lobj nil nil
+    ] [
+      [ rot ] dip  ! env lst ret lobj
+      swap make-cons -rot  ! ret env lst
+      data>> cdr>>
+    ] if
+  ] while 2drop
+  dup tag>> "error" = [
+  ] [
+    nreverse
+  ] if ;
+
+: subr-car ( args -- lobj )
+  safe-car safe-car ;
+
+: subr-cdr ( args -- lobj )
+  safe-car safe-cdr ;
+
+: subr-cons ( args -- lobj )
+  dup safe-car swap safe-cdr safe-car make-cons ;
+
+: subr-call ( args n -- lobj )
+  dup 0 = [
+    drop subr-car
+  ] [
+    dup 1 = [
+      drop subr-cdr
+    ] [
+      dup 2 = [
+        drop subr-cons
+      ] [
+        2drop "subr-noimpl" make-error
+      ] if
+    ] if
+  ] if ;
+
+: apply ( fn args env -- lobj )
+  -rot dup tag>> "error" = [  ! env fn args
+    2nip
+  ] [
+    swap dup tag>> "error" = [  ! env args fn
+      2nip
+    ] [
+      dup tag>> "subr" = [
+        data>> subr-call nip
+      ] [
+        3drop "noimpl" make-error
+      ] if
+    ] if
+  ] if ;
+
+"car" make-sym 0 make-subr g-env get-global add-to-env
+"cdr" make-sym 1 make-subr g-env get-global add-to-env
+"cons" make-sym 2 make-subr g-env get-global add-to-env
 "t" make-sym "t" make-sym g-env get-global add-to-env
 
 "> " write flush
