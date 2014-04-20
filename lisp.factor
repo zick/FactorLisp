@@ -63,8 +63,9 @@ SYMBOL: sym-table
 : make-subr ( n -- lobj )
   "subr" swap <lobj> ;
 
-: make-expr ( args body env -- lobj )
-  <expr> "expr" swap <lobj> ;
+: make-expr ( args env -- lobj )
+  swap dup safe-car swap safe-cdr  ! env args body
+  rot <expr> "expr" swap <lobj> ;
 
 : nreverse ( lobj -- lobj )
   kNil get-global swap
@@ -270,11 +271,12 @@ DEFER: evlis
           swap eval
         ] [
           dup "lambda" make-sym eq? [
-            drop dup safe-car -rot  ! CAR(args) env args
-            safe-cdr swap make-expr
+            drop swap make-expr
           ] [
             dup "defun" make-sym eq? [
-              3drop "defun" make-error
+              drop dup safe-car swap safe-cdr  ! env CAR(args) CDR(args)
+              rot make-expr dupd  ! CAR(args) CAR(args) expr
+              g-env get-global add-to-env
             ] [
               dup "setq" make-sym eq? [
                 3drop "setq" make-error
