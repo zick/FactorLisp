@@ -336,6 +336,63 @@ DEFER: evlis
 : subr-cons ( args -- lobj )
   dup safe-car swap safe-cdr safe-car make-cons ;
 
+: subr-eq ( args -- lobj )
+  dup safe-car swap safe-cdr safe-car  ! x y
+  dup tag>> "num" = rot dup tag>> "num" = rot and swapd [  ! x y
+    data>> swap data>> = [
+      "t" make-sym
+    ] [
+      kNil get-global
+    ] if
+  ] [
+    eq? [ "t" make-sym ] [ kNil get-global ] if
+  ] if ;
+
+: subr-atom ( args -- lobj )
+  safe-car tag>> "cons" = [
+    kNil get-global
+  ] [
+    "t" make-sym
+  ] if ;
+
+: subr-numberp ( args -- lobj )
+  safe-car tag>> "num" = [
+    "t" make-sym
+  ] [
+    kNil get-global
+  ] if ;
+
+: subr-symbolp ( args -- lobj )
+  safe-car tag>> "sym" = [
+    "t" make-sym
+  ] [
+    kNil get-global
+  ] if ;
+
+: subr-arith ( args n -- lobj )
+  swap dup safe-car data>> swap safe-cdr safe-car data>> rot  ! x y n
+  dup 7 = [
+    drop + make-num
+  ] [
+    dup 8 = [
+     drop * make-num
+    ] [
+      dup 9 = [
+        drop - make-num
+      ] [
+        dup 10 = [
+          drop / make-num
+        ] [
+          dup 11 = [
+            drop mod make-num
+          ] [
+            3drop "unknown subr" make-error
+          ] if
+        ] if
+      ] if
+    ] if
+  ] if ;
+
 : subr-call ( args n -- lobj )
   dup 0 = [
     drop subr-car
@@ -346,7 +403,23 @@ DEFER: evlis
       dup 2 = [
         drop subr-cons
       ] [
-        2drop "subr-noimpl" make-error
+        dup 3 = [
+          drop subr-eq
+        ] [
+          dup 4 = [
+            drop subr-atom
+          ] [
+            dup 5 = [
+              drop subr-numberp
+            ] [
+              dup 6 = [
+                drop subr-symbolp
+              ] [
+                subr-arith
+              ] if
+            ] if
+          ] if
+        ] if
       ] if
     ] if
   ] if ;
@@ -378,6 +451,15 @@ DEFER: evlis
 "car" make-sym 0 make-subr g-env get-global add-to-env
 "cdr" make-sym 1 make-subr g-env get-global add-to-env
 "cons" make-sym 2 make-subr g-env get-global add-to-env
+"eq" make-sym 3 make-subr g-env get-global add-to-env
+"atom" make-sym 4 make-subr g-env get-global add-to-env
+"numberp" make-sym 5 make-subr g-env get-global add-to-env
+"symbolp" make-sym 6 make-subr g-env get-global add-to-env
+"+" make-sym 7 make-subr g-env get-global add-to-env
+"*" make-sym 8 make-subr g-env get-global add-to-env
+"-" make-sym 9 make-subr g-env get-global add-to-env
+"/" make-sym 10 make-subr g-env get-global add-to-env
+"mod" make-sym 11 make-subr g-env get-global add-to-env
 "t" make-sym "t" make-sym g-env get-global add-to-env
 
 "> " write flush
