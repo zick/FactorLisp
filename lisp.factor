@@ -279,7 +279,14 @@ DEFER: evlis
               g-env get-global add-to-env
             ] [
               dup "setq" make-sym eq? [
-                3drop "setq" make-error
+                drop dupd dup safe-car swap safe-cdr safe-car  ! env env sym val
+                rot eval -rot swap dupd  ! val sym sym env
+                find-var dup kNil get-global eq? [  ! val sym bind
+                  drop dupd swap g-env get-global add-to-env
+                ] [
+                  nip dupd  ! val val bind
+                  data>> cdr<<
+                ] if
               ] [
                 rot dup -rot  ! args env op env
                 eval  ! args env fn
