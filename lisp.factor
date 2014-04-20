@@ -74,6 +74,15 @@ SYMBOL: sym-table
     swap  ! lst tmp
   ] while drop ;
 
+: pairlis ( lst1 lst2 -- lobj )
+  kNil get-global -rot  ! ret lst1 lst2
+  [ dup tag>> "cons" = rot dup tag>> "cons" = rot and swapd ] [  ! ret lst1 lst2
+    dup data>> car>> rot dup data>> car>> rot make-cons swapd
+    [ rot ] dip  ! lst1 lst2 ret cons
+    swap make-cons -rot  ! ret lst1 lst2
+    data>> cdr>> swap data>> cdr>> swap
+  ] while 2drop nreverse ;
+
 : space? ( ch -- ? )
   V{ 0x09 0x0a 0x0d 0x20 } member? ;  ! Tab, Linefeed, Return, Space
 
@@ -260,11 +269,24 @@ DEFER: evlis
           ] if
           swap eval
         ] [
-          rot dup -rot  ! args env op env
-          eval  ! args env fn
-          -rot dup -rot  ! fn env args env
-          evlis  ! fn env args
-          swap apply
+          dup "lambda" make-sym eq? [
+            drop dup safe-car -rot  ! CAR(args) env args
+            safe-cdr swap make-expr
+          ] [
+            dup "defun" make-sym eq? [
+              3drop "defun" make-error
+            ] [
+              dup "setq" make-sym eq? [
+                3drop "setq" make-error
+              ] [
+                rot dup -rot  ! args env op env
+                eval  ! args env fn
+                -rot dup -rot  ! fn env args env
+                evlis  ! fn env args
+                swap apply
+              ] if
+            ] if
+          ] if
         ] if
       ] if
     ] if
@@ -287,6 +309,14 @@ DEFER: evlis
   ] [
     nreverse
   ] if ;
+
+: progn ( body env -- lobj )
+  swap kNil get-global -rot  ! ret env body
+  [ dup tag>> "cons" = ] [
+    rot drop  ! env body
+    dupd data>> dup cdr>> swap car>>  ! env env CDR(body) CAR(body)
+    rot eval -rot  ! lobj env CDR(body)
+  ] while 2drop ;
 
 : subr-car ( args -- lobj )
   safe-car safe-car ;
@@ -322,7 +352,16 @@ DEFER: evlis
       dup tag>> "subr" = [
         data>> subr-call nip
       ] [
-        3drop "noimpl" make-error
+        dup tag>> "expr" = [
+          rot drop  ! args fn
+          data>> dup args>>  ! args fnd args
+          rot pairlis  ! fnd binds
+          swap dup env>>  ! binds fnd env
+          rot swap make-cons  ! fnd env
+          swap body>> swap progn
+        ] [
+          3drop "noimpl" make-error
+        ] if
       ] if
     ] if
   ] if ;
