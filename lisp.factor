@@ -192,8 +192,63 @@ DEFER: print-list
     print-obj " . " swap 3append ")" append
   ] if ;
 
+: find-internal ( sym alist -- lobj ? )
+  dup tag>> "cons" = [
+    dup data>> car>> data>> car>> ! sym alist key
+    rot = [
+      data>> car>> f
+    ] [
+      data>> cdr>> t
+    ] if
+  ] [
+    2drop kNil get-global f
+  ] if ;
+
+: find-var ( sym env -- lobj )
+  [ dup tag>> "cons" = ] [  ! sym env
+    dup data>> car>> swapd  ! env sym alist
+    [ dupd find-internal ] [  ! env sym lobj
+    ] while
+    dup tag>> "cons" = [
+      2nip kNil get-global  ! lobj nil
+    ] [
+      drop swap data>> cdr>>  ! sym env
+    ] if
+  ] while
+  drop dup tag>> "cons" = [
+  ] [
+    drop kNil get-global
+  ] if ;
+
+SYMBOL: g-env
+kNil get-global dup make-cons g-env set-global
+
+: add-to-env ( sym val env -- )
+  -rot make-cons swap  ! pair env
+  data>> dup car>> rot swap make-cons  ! data pair
+  swap car<< ;
+
+: eval ( lobj env -- lobj )
+  swap dup tag>>  ! env lobj tag
+  dup "nil" = swap dup "num" = rot or swap dup "error" = rot or [
+    drop nip
+  ] [
+    "sym" = [  ! env lobj
+      swap dupd find-var  ! lobj bind
+      dup kNil get-global eq? [
+        drop data>> " has no value" append make-error
+      ] [
+        nip data>> cdr>>
+      ] if
+    ] [
+      2drop "noimpl" make-error
+    ] if
+  ] if ;
+
+"t" make-sym "t" make-sym g-env get-global add-to-env
+
 "> " write flush
 [ readln dup ] [
-  read drop print-obj print
+  read drop g-env get-global eval print-obj print
   "> " write flush
 ] while drop
