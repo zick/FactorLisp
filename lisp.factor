@@ -66,6 +66,12 @@ SYMBOL: sym-defun
 "defun" make-sym sym-defun set-global
 SYMBOL: sym-setq
 "setq" make-sym sym-setq set-global
+SYMBOL: sym-loop
+"loop" make-sym sym-loop set-global
+SYMBOL: sym-return
+"return" make-sym sym-return set-global
+SYMBOL: loop-val
+kNil get-global loop-val set-global
 
 : make-num ( n -- lobj )
   "num" swap <lobj> ;
@@ -257,6 +263,7 @@ kNil get-global dup make-cons g-env set-global
 
 DEFER: apply
 DEFER: evlis
+DEFER: loop
 
 : eval ( lobj env -- lobj )
   swap dup tag>>  ! env lobj tag
@@ -277,12 +284,18 @@ DEFER: evlis
       ] [
         dup sym-if get-global eq? [
           drop dupd dup safe-cdr swap safe-car  ! env env CDR(args) CAR(args)
-          rot eval kNil get-global eq? [  ! env CDR(args)
-            safe-cdr safe-car
+          rot eval  ! env CDR(args) obj
+          dup tag>> "error" = [
+            nip nip
           ] [
-            safe-car
+            kNil get-global eq? [  ! env CDR(args)
+            safe-cdr safe-car
+            swap eval
+            ] [
+              safe-car
+              swap eval
+            ] if
           ] if
-          swap eval
         ] [
           dup sym-lambda get-global eq? [
             drop swap make-expr
@@ -294,19 +307,33 @@ DEFER: evlis
             ] [
               dup sym-setq get-global eq? [
                 drop dupd dup safe-car swap safe-cdr safe-car  ! env env sym val
-                rot eval -rot swap dupd  ! val sym sym env
-                find-var dup kNil get-global eq? [  ! val sym bind
-                  drop dupd swap g-env get-global add-to-env
+                rot eval  ! env sym obj
+                dup tag>> "error" = [
+                  nip nip
                 ] [
-                  nip dupd  ! val val bind
-                  data>> cdr<<
+                  -rot swap dupd  ! val sym sym env
+                  find-var dup kNil get-global eq? [  ! val sym bind
+                    drop dupd swap g-env get-global add-to-env
+                  ] [
+                    nip dupd  ! val val bind
+                    data>> cdr<<
+                  ] if
                 ] if
               ] [
-                rot dup -rot  ! args env op env
-                eval  ! args env fn
-                -rot dup -rot  ! fn env args env
-                evlis  ! fn env args
-                swap apply
+                dup sym-loop get-global eq? [
+                  drop swap loop
+                ] [
+                  dup sym-return get-global eq? [
+                    drop safe-car swap eval loop-val set-global
+                    "" make-error
+                  ] [
+                    rot dup -rot  ! args env op env
+                    eval  ! args env fn
+                    -rot dup -rot  ! fn env args env
+                    evlis  ! fn env args
+                    swap apply
+                  ] if
+                ] if
               ] if
             ] if
           ] if
@@ -338,7 +365,27 @@ DEFER: evlis
   [ dup tag>> "cons" = ] [
     rot drop  ! env body
     dupd data>> dup cdr>> swap car>>  ! env env CDR(body) CAR(body)
-    rot eval -rot  ! lobj env CDR(body)
+    rot eval  ! env CDR(body) lobj
+    dup tag>> "error" = [
+      -rot drop kNil get-global  ! lobj env nil
+    ] [
+      -rot  ! lobj env CDR(body)
+    ] if
+  ] while 2drop ;
+
+: loop ( body env -- lobj )
+  kNil get-global -rot t
+  [ ] [  ! result body env
+    2dup progn  ! result body env obj
+    dup tag>> "error" = [
+      dup data>> "" = [
+        4drop loop-val get-global f f f
+      ] [
+        -rot 2drop nip f f f
+      ] if
+    ] [
+      drop t
+    ] if
   ] while 2drop ;
 
 : subr-car ( args -- lobj )
