@@ -54,6 +54,19 @@ SYMBOL: sym-table
     ] if
   ] if ;
 
+SYMBOL: sym-t
+"t" make-sym sym-t set-global
+SYMBOL: sym-quote
+"quote" make-sym sym-quote set-global
+SYMBOL: sym-if
+"if" make-sym sym-if set-global
+SYMBOL: sym-lambda
+"lambda" make-sym sym-lambda set-global
+SYMBOL: sym-defun
+"defun" make-sym sym-defun set-global
+SYMBOL: sym-setq
+"setq" make-sym sym-setq set-global
+
 : make-num ( n -- lobj )
   "num" swap <lobj> ;
 
@@ -135,7 +148,8 @@ DEFER: read-list
       ] [
         dup 0 swap nth 0x27 = [  ! Quote
           dup length 1 swap rot subseq read  !  obj next
-          swap kNil get-global make-cons "quote" make-sym swap make-cons swap
+          swap kNil get-global make-cons sym-quote get-global
+          swap make-cons swap
         ] [
           read-atom
         ] if
@@ -258,10 +272,10 @@ DEFER: evlis
       ] if
     ] [
       data>> dup cdr>> swap car>>  ! env args op
-      dup "quote" make-sym eq? [
+      dup sym-quote get-global eq? [
         drop nip safe-car
       ] [
-        dup "if" make-sym eq? [
+        dup sym-if get-global eq? [
           drop dupd dup safe-cdr swap safe-car  ! env env CDR(args) CAR(args)
           rot eval kNil get-global eq? [  ! env CDR(args)
             safe-cdr safe-car
@@ -270,15 +284,15 @@ DEFER: evlis
           ] if
           swap eval
         ] [
-          dup "lambda" make-sym eq? [
+          dup sym-lambda get-global eq? [
             drop swap make-expr
           ] [
-            dup "defun" make-sym eq? [
+            dup sym-defun get-global eq? [
               drop dup safe-car swap safe-cdr  ! env CAR(args) CDR(args)
               rot make-expr dupd  ! CAR(args) CAR(args) expr
               g-env get-global add-to-env
             ] [
-              dup "setq" make-sym eq? [
+              dup sym-setq get-global eq? [
                 drop dupd dup safe-car swap safe-cdr safe-car  ! env env sym val
                 rot eval -rot swap dupd  ! val sym sym env
                 find-var dup kNil get-global eq? [  ! val sym bind
@@ -340,31 +354,31 @@ DEFER: evlis
   dup safe-car swap safe-cdr safe-car  ! x y
   dup tag>> "num" = rot dup tag>> "num" = rot and swapd [  ! x y
     data>> swap data>> = [
-      "t" make-sym
+      sym-t get-global
     ] [
       kNil get-global
     ] if
   ] [
-    eq? [ "t" make-sym ] [ kNil get-global ] if
+    eq? [ sym-t get-global ] [ kNil get-global ] if
   ] if ;
 
 : subr-atom ( args -- lobj )
   safe-car tag>> "cons" = [
     kNil get-global
   ] [
-    "t" make-sym
+    sym-t get-global
   ] if ;
 
 : subr-numberp ( args -- lobj )
   safe-car tag>> "num" = [
-    "t" make-sym
+    sym-t get-global
   ] [
     kNil get-global
   ] if ;
 
 : subr-symbolp ( args -- lobj )
   safe-car tag>> "sym" = [
-    "t" make-sym
+    sym-t get-global
   ] [
     kNil get-global
   ] if ;
@@ -460,7 +474,7 @@ DEFER: evlis
 "-" make-sym 9 make-subr g-env get-global add-to-env
 "/" make-sym 10 make-subr g-env get-global add-to-env
 "mod" make-sym 11 make-subr g-env get-global add-to-env
-"t" make-sym "t" make-sym g-env get-global add-to-env
+sym-t get-global sym-t get-global g-env get-global add-to-env
 
 "> " write flush
 [ readln dup ] [
